@@ -1,0 +1,43 @@
+# PAttn with DINOv3 Backbone for Time Series Forecasting
+
+Repository này tích hợp kiến trúc mô hình **PAttn** (*Are Language Models Actually Useful for Time Series Forecasting?*, NeurIPS 2024) kết hợp với **DINOv3 Backbone** (Self-Supervised Vision Transformer) làm bộ trích xuất đặc trưng (Encoder).
+
+---
+
+## 🚀 Các điểm cập nhật chính trong Mã nguồn (Code Updates)
+
+### 1. Thay thế Encoder Backbone (`models/PAttn.py`)
+* **Trước:** Sử dụng `nn.TransformerEncoderLayer` / `Encoder_LLaTA`.
+* **Sau:** Tích hợp Pretrained **DINOv3** Backbone (`facebook/dinov3-base-p16`) từ Hugging Face.
+* **Freeze Weights:** Đóng đóng băng trọng số DINOv3 (`requires_grad = False`) để làm Feature Extractor ổn định.
+
+### 2. Tự động đồng bộ số chiều Feature (`d_model`)
+* Tự động đồng bộ chiều ẩn `hidden_size` của DINOv3 (`d_model = 768`).
+* Điều chỉnh các lớp tuyến tính `input_projection` và `head` khớp với không gian biểu diễn mới.
+
+### 3. Luồng xử lý Patch & Feature Extraction
+* Dữ liệu chuỗi thời gian được chuẩn hóa (Instance Norm) và chia đoạn (Patching).
+* Mỗi patch được chiếu sang vector embedding `d_model` rồi truyền qua khối Transformer Encoder của DINOv3.
+* Đầu ra `last_hidden_state` được trải phẳng (flatten) và đưa qua Forecast Head để dự báo `pred_len`.
+
+---
+
+## 🛠️ Hướng dẫn Cài đặt & Chạy mô hình
+
+```bash
+# 1. Cài đặt các thư viện cần thiết
+pip install torch transformers pandas scikit-learn
+
+# 2. Huấn luyện / Chạy kiểm thử mô hình PAttn + DINOv3
+python run.py \
+  --is_training 1 \
+  --root_path ./dataset/ \
+  --data_path ETTm2.csv \
+  --model_id ETTm2_512_24 \
+  --model PAttn \
+  --data ETTm2 \
+  --features M \
+  --seq_len 512 \
+  --pred_len 24 \
+  --patch_size 16 \
+  --stride 8
