@@ -162,10 +162,20 @@ for ii in range(args.itr):
                 return torch.mean(200 * torch.abs(pred - true) / (torch.abs(pred) + torch.abs(true) + 1e-8))
         criterion = SMAPE()
 
-    if 'l2loss' in args.model_id : 
-        criterion = nn.MSELoss()
-    else : 
-        criterion = nn.L1Loss()
+    # Định nghĩa Combined Loss Function (0.5 * MSE + 0.5 * MAE)
+    class CombinedLoss(nn.Module):
+        def __init__(self, alpha=0.5):
+            super(CombinedLoss, self).__init__()
+            self.alpha = alpha
+            self.mse = nn.MSELoss()
+            self.mae = nn.L1Loss()
+
+        def forward(self, pred, true):
+            loss_mse = self.mse(pred, true)
+            loss_mae = self.mae(pred, true)
+            return self.alpha * loss_mse + (1 - self.alpha) * loss_mae
+
+    criterion = CombinedLoss(alpha=0.5)
         
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, T_max=args.tmax, eta_min=1e-8)
     is_first = True 
