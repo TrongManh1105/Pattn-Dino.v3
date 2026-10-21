@@ -30,8 +30,7 @@ Repository này giữ nguyên luồng xử lý chính của **PAttn** và tiến
 
 ### 2. Cập nhật Combined Loss Function (`main.py`) *(Mới)*
 - **Cấu hình cũ:** Sử dụng hàm Loss đơn lẻ (`MSELoss` hoặc `L1Loss`).
-- **Cập nhật mới:** Tích hợp lớp `CombinedLoss(nn.Module)` kết hợp giữa **MSE** (Mean Squared Error) và **MAE** (Mean Absolute Error) với hệ số $\alpha = 0.5$:
-  $$\mathcal{L}_{\text{total}} = 0.5 \times \mathcal{L}_{\text{MSE}} + 0.5 \times \mathcal{L}_{\text{MAE}}$$
+- - **Cập nhật mới:** Tích hợp lớp `CombinedLoss(nn.Module)` kết hợp giữa **MSE** (Mean Squared Error) và **MAE** (Mean Absolute Error) với hệ số $\alpha = 0.5$: $\mathcal{L}_{\text{total}} = 0.5 \times \mathcal{L}_{\text{MSE}} + 0.5 \times \mathcal{L}_{\text{MAE}}$
 - **Ưu điểm:** Giúp mô hình vừa tối ưu hóa tốc độ hội tụ (nhờ đặc tính mượt của MSE), vừa tăng độ bền vững (robustness) trước các điểm dữ liệu dị biệt (outliers) nhờ MAE.
 
 ---
