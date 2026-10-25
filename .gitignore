@@ -1,0 +1,29 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+.venv/
+venv/
+ENV/
+
+# Secrets and environment configurations
+.env
+.env.local
+
+# Checkpoints, Large Datasets, and Logs
+checkpoints/
+datasets/
+*.parquet
+*.csv
+!dataset/example_sample.csv
+*.log
+runs/
+
+# IDE / OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

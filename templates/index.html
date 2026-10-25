@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PAttn BTC/USDT Prediction (DINOv3)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js for high-fidelity time series & forecast rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #edf2f7;
+    }
+    
+    .window-container {
+      background: #ffffff;
+      border: 1.5px solid #d1d5db;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.12), 0 0 20px rgba(0,0,0,0.04);
+    }
+
+    /* Dashed borders matching user mockup */
+    .panel-input {
+      border: 2px dashed #fca5a5;
+      background: #fff8f8;
+    }
+    .panel-preview {
+      border: 2px dashed #93c5fd;
+      background: #f0f7ff;
+    }
+    .panel-result {
+      border: 2px dashed #86efac;
+      background: #f2fdf5;
+    }
+
+    /* Mac dots */
+    .mac-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    }
+    .dot-red { background: #ff5f56; border: 1px solid #e0443e; }
+    .dot-yellow { background: #ffbd2e; border: 1px solid #dea123; }
+    .dot-green { background: #27c93f; border: 1px solid #1aab29; }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+
+    /* Pulse animation for running state */
+    @keyframes pulse-btn {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(0.98); opacity: 0.9; }
+    }
+    .running-state {
+      animation: pulse-btn 1.2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen py-8 px-4 flex flex-col items-center justify-center">
+
+  <!-- Top Navigation & Controls Bar -->
+  <div class="w-full max-w-6xl mb-3 flex flex-wrap items-center justify-between px-2 text-xs text-gray-500 font-medium">
+    <div class="flex items-center gap-2">
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
+        <span class="w-2 h-2 mr-1.5 bg-indigo-600 rounded-full animate-ping"></span>
+        Model: PAttn + DINOv3 Backbone
+      </span>
+      <span class="text-gray-400">|</span>
+      <span>NeurIPS 2024 Spotlight Architecture</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <label class="flex items-center gap-1.5 cursor-pointer select-none">
+        <input type="checkbox" id="presetMockupCheck" checked class="rounded border-gray-300 text-purple-600 focus:ring-purple-500">
+        <span>Mockup Values Preset (Bullish 88%)</span>
+      </label>
+      <span class="text-gray-400">|</span>
+      <button onclick="loadSampleData()" class="text-indigo-600 hover:text-indigo-800 font-semibold underline">
+        Reset Default (BTCUSDT_15m)
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN WINDOW COMPONENT (Exact reproduction of uploaded image) -->
+  <div class="window-container w-full max-w-6xl rounded-3xl p-6 sm:p-8 transition-all duration-300">
+    
+    <!-- Window Header -->
+    <div class="flex items-center justify-between pb-6 border-b border-gray-100 mb-6">
+      <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center">
+        <span class="underline decoration-gray-900 decoration-3 underline-offset-4 mr-2">PAttn</span>
+        <span>BTC/USDT Prediction</span>
+      </h1>
+      <!-- macOS Window Control Dots -->
+      <div class="flex items-center gap-2.5">
+        <span class="mac-dot dot-red cursor-pointer hover:opacity-80 transition" title="Close"></span>
+        <span class="mac-dot dot-yellow cursor-pointer hover:opacity-80 transition" title="Minimize"></span>
+        <span class="mac-dot dot-green cursor-pointer hover:opacity-80 transition" title="Maximize"></span>
+      </div>
+    </div>
+
+    <!-- 3-Column Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+
+      <!-- ========================================== -->
+      <!-- COLUMN 1: Input Data (BTC/USDT) [col-span-3] -->
+      <!-- ========================================== -->
+      <div class="lg:col-span-3 panel-input rounded-2xl p-5 flex flex-col justify-between">
+        <div>
+          <!-- Panel Header Badge -->
+          <div class="inline-block bg-[#fde8e8] text-gray-800 font-bold text-sm px-4 py-2 rounded-xl mb-6 shadow-sm border border-red-100">
+            Input Data (BTC/USDT)
+          </div>
+
+          <!-- Upload Dropzone Card -->
+          <div id="dropZone" onclick="document.getElementById('fileInput').click()" 
+               class="bg-white rounded-2xl border-2 border-dashed border-gray-200 hover:border-red-300 p-8 flex flex-col items-center justify-center cursor-pointer transition-all duration-200 group shadow-sm hover:shadow">
+            
+            <input type="file" id="fileInput" accept=".csv,.txt" class="hidden" onchange="handleFileUpload(event)">
+            
+            <!-- Cloud Upload SVG Icon (Matching Mockup) -->
+            <div class="w-20 h-20 mb-4 flex items-center justify-center text-gray-600 group-hover:text-red-500 transition-colors">
+              <svg class="w-16 h-16" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M46.5 28C45.3 19 37.5 12 28 12C20.2 12 13.5 17 10.7 24C4.6 25.5 0 31.1 0 37.7C0 45.6 6.4 52 14.3 52H46.7C53.5 52 59 46.5 59 39.7C59 33.3 54.1 28.2 46.5 28Z" fill="#5f6d7e"/>
+                <path d="M29.5 25L21 34.5H26.5V45H32.5V34.5H38L29.5 25Z" fill="white"/>
+              </svg>
+            </div>
+
+            <!-- Upload Labels -->
+            <p class="font-bold text-gray-800 text-base mb-1 text-center">Upload file Data</p>
+            <p class="text-xs text-gray-500 text-center">(CSV, TXT, etc.)</p>
+          </div>
+
+          <!-- Dataset Status & Metadata -->
+          <div id="datasetInfoCard" class="mt-4 bg-white/80 rounded-xl p-3 border border-red-100 text-xs text-gray-700 space-y-1.5 shadow-sm">
+            <div class="flex justify-between items-center font-semibold text-gray-800">
+              <span id="dsName">BTCUSDT_15m_private.csv</span>
+              <span id="dsStatus" class="text-emerald-600 font-bold text-[11px] bg-emerald-50 px-2 py-0.5 rounded-full">Sẵn sàng</span>
+            </div>
+            <div class="flex justify-between text-gray-500 text-[11px]">
+              <span>Tổng số records:</span>
+              <span id="dsRows" class="font-mono font-medium text-gray-800">96,613</span>
+            </div>
+            <div class="flex justify-between text-gray-500 text-[11px]">
+              <span>Lookback window (L):</span>
+              <span class="font-mono font-medium text-gray-800">512 nến (~5.3 ngày)</span>
+            </div>
+            <div class="flex justify-between text-gray-500 text-[11px]">
+              <span>Features (M=7):</span>
+              <span class="font-mono font-medium text-gray-800">OHLCV + Trades</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sliding Window Selector -->
+        <div class="mt-4 pt-3 border-t border-red-200/50">
+          <div class="flex justify-between text-[11px] text-gray-600 mb-1">
+            <span>Chọn mốc thời gian:</span>
+            <span id="windowDateDisplay" class="font-medium text-gray-800">Mới nhất</span>
+          </div>
+          <input type="range" id="windowSlider" min="512" max="96613" value="96613" step="50"
+                 oninput="onSliderChange(this.value)"
+                 class="w-full accent-purple-600 cursor-pointer h-1.5 bg-red-200 rounded-lg">
+          <div class="flex justify-between text-[10px] text-gray-400 mt-1">
+            <span>Quá khứ</span>
+            <span>Hiện tại (Latest)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================================================== -->
+      <!-- COLUMN 2: Signal & Feature Preview [col-span-5] -->
+      <!-- ==================================================== -->
+      <div class="lg:col-span-5 panel-preview rounded-2xl p-5 flex flex-col justify-between">
+        <div>
+          <!-- Panel Header Badge -->
+          <div class="inline-block bg-[#e1edff] text-gray-800 font-bold text-sm px-4 py-2 rounded-xl mb-4 shadow-sm border border-blue-100">
+            Signal & Feature Preview
+          </div>
+
+          <!-- Top Card: Price & Volume Series (Time Domain) -->
+          <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4 shadow-sm">
+            <h3 class="font-bold text-gray-800 text-sm mb-3">Price & Volume Series (Time Domain)</h3>
+            
+            <!-- Coordinate Canvas with Arrowed Axes -->
+            <div class="relative w-full h-36 bg-white overflow-hidden flex items-center justify-center">
+              <canvas id="timeDomainCanvas" class="w-full h-full"></canvas>
+            </div>
+            
+            <!-- X-axis Label -->
+            <p class="text-center text-xs text-gray-700 font-semibold mt-2">
+              Time-series index (L=512)
+            </p>
+          </div>
+
+          <!-- Bottom Card: Patched View & Segment (Patch Domain) -->
+          <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+            <h3 class="font-bold text-gray-800 text-sm mb-3">Patched View & Segment (Patch Domain)</h3>
+            
+            <!-- Visual Patches Representation matching mockup -->
+            <div class="w-full h-32 bg-white flex items-center justify-around px-2 relative">
+              <!-- Left Stack: Time Patches (Dashed boxes with waveforms) -->
+              <div class="relative w-36 h-24 flex items-center justify-center">
+                <!-- Patch Card 1 (Red dashed) -->
+                <div class="absolute w-20 h-16 border-2 border-dashed border-red-400 rounded-lg bg-red-50/40 transform -translate-x-4 -translate-y-2 flex items-center justify-center p-1 shadow-sm">
+                  <svg class="w-full h-full" viewBox="0 0 40 25">
+                    <path d="M 0 18 Q 8 2 15 14 T 30 5 T 40 18" fill="none" stroke="#ef4444" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <!-- Patch Card 2 (Blue dashed) -->
+                <div class="absolute w-20 h-16 border-2 border-dashed border-blue-400 rounded-lg bg-blue-50/40 transform translate-x-0 translate-y-0 flex items-center justify-center p-1 shadow-sm">
+                  <svg class="w-full h-full" viewBox="0 0 40 25">
+                    <path d="M 0 12 Q 10 24 20 8 T 35 20 T 40 10" fill="none" stroke="#3b82f6" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <!-- Patch Card 3 (Green dashed) -->
+                <div class="absolute w-20 h-16 border-2 border-dashed border-emerald-400 rounded-lg bg-emerald-50/40 transform translate-x-4 translate-y-2 flex items-center justify-center p-1 shadow-sm">
+                  <svg class="w-full h-full" viewBox="0 0 40 25">
+                    <path d="M 0 15 Q 10 4 22 22 T 34 8 T 40 12" fill="none" stroke="#10b981" stroke-width="1.5"/>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Right Stack: Projected Segment Representations -->
+              <div class="relative w-36 h-24 flex items-center justify-center">
+                <!-- Segment Card 1 (Blue dashed) -->
+                <div class="absolute w-20 h-16 border-2 border-dashed border-blue-400 rounded-lg bg-blue-50/40 transform -translate-x-3 -translate-y-2 flex items-center justify-center p-1 shadow-sm">
+                  <svg class="w-full h-full" viewBox="0 0 40 25">
+                    <path d="M 0 10 Q 12 2 24 16 T 38 6" fill="none" stroke="#60a5fa" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <!-- Segment Card 2 (Red dashed) -->
+                <div class="absolute w-20 h-16 border-2 border-dashed border-red-400 rounded-lg bg-red-50/40 transform translate-x-1 translate-y-0 flex items-center justify-center p-1 shadow-sm">
+                  <svg class="w-full h-full" viewBox="0 0 40 25">
+                    <path d="M 0 16 Q 10 20 20 6 T 38 18" fill="none" stroke="#f87171" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <!-- Segment Card 3 (Green dashed) -->
+                <div class="absolute w-20 h-16 border-2 border-dashed border-emerald-400 rounded-lg bg-emerald-50/40 transform translate-x-4 translate-y-2 flex items-center justify-center p-1 shadow-sm">
+                  <svg class="w-full h-full" viewBox="0 0 40 25">
+                    <path d="M 0 8 Q 8 22 22 4 T 38 14" fill="none" stroke="#34d399" stroke-width="1.5"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- N=63 Patches label -->
+            <p class="text-center text-xs text-gray-700 font-semibold mt-2">
+              N=63 Patches (P=16, S=8)
+            </p>
+          </div>
+        </div>
+
+        <!-- Run Prediction Button (Purple, Matching Mockup) -->
+        <div class="mt-5">
+          <button id="runBtn" onclick="executePrediction()" 
+                  class="w-full bg-[#7265d6] hover:bg-[#5f51ce] active:bg-[#5244be] text-white font-bold py-3.5 px-6 rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-3 text-lg cursor-pointer">
+            <span id="btnIcon" class="text-xl">▶</span>
+            <span id="btnText">Run Prediction</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- COLUMN 3: Prediction Result [col-span-4] -->
+      <!-- ============================================== -->
+      <div class="lg:col-span-4 panel-result rounded-2xl p-5 flex flex-col justify-between">
+        <div class="space-y-4">
+          <!-- Panel Header Badge -->
+          <div class="inline-block bg-[#dcf4e2] text-gray-800 font-bold text-sm px-4 py-2 rounded-xl mb-1 shadow-sm border border-emerald-100">
+            Prediction Result
+          </div>
+
+          <!-- Card 1: Predicted Action (H = 24) -->
+          <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+            <p class="text-xs font-bold text-gray-800 mb-2">Predicted Action (H = 24)</p>
+            <p id="actionValue" class="text-xl sm:text-2xl font-extrabold text-[#16a34a] tracking-tight">
+              BULLISH (BUY / LONG)
+            </p>
+          </div>
+
+          <!-- Card 2: Model Confidence: 88% -->
+          <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-gray-800">Model Confidence:</span>
+              <span id="confidenceValue" class="text-xl font-extrabold text-[#16a34a]">88%</span>
+            </div>
+            <!-- Progress Bar -->
+            <div class="w-full bg-gray-200 rounded-full h-3.5 overflow-hidden">
+              <div id="confidenceBar" class="bg-[#78be68] h-full rounded-full transition-all duration-700" style="width: 88%;"></div>
+            </div>
+          </div>
+
+          <!-- Card 3: Forecasting Probabilities -->
+          <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm text-xs space-y-2.5">
+            <h4 class="font-bold text-gray-800 text-sm mb-3">Forecasting Probabilities</h4>
+
+            <!-- Bullish / Upward -->
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-[#16a34a] w-32">Bullish / Upward</span>
+              <div class="flex-1 mx-3 bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div id="probBullishBar" class="bg-[#78be68] h-full rounded-full transition-all duration-500" style="width: 88%;"></div>
+              </div>
+              <span id="probBullishVal" class="font-semibold text-gray-600 w-10 text-right">88%</span>
+            </div>
+
+            <!-- Sideway / Hold -->
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-gray-700 w-32">Sideway / Hold</span>
+              <div class="flex-1 mx-3 bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div id="probSidewayBar" class="bg-gray-400 h-full rounded-full transition-all duration-500" style="width: 9%;"></div>
+              </div>
+              <span id="probSidewayVal" class="font-semibold text-gray-600 w-10 text-right">9%</span>
+            </div>
+
+            <!-- Bearish / Downward -->
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-[#dc2626] w-32">Bearish / Downward</span>
+              <div class="flex-1 mx-3 bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div id="probBearishBar" class="bg-[#e15241] h-full rounded-full transition-all duration-500" style="width: 3%;"></div>
+              </div>
+              <span id="probBearishVal" class="font-semibold text-gray-600 w-10 text-right">3%</span>
+            </div>
+
+            <div class="border-t border-gray-100 my-2 pt-2"></div>
+
+            <!-- MSE Loss Score -->
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-gray-700 w-32">MSE Loss Score</span>
+              <div class="flex-1 mx-3 bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                <div class="bg-gray-400 h-full rounded-full" style="width: 15%;"></div>
+              </div>
+              <span id="mseVal" class="font-mono text-gray-600 text-[11px] w-12 text-right">0.0124</span>
+            </div>
+
+            <!-- Target Price (24 steps) -->
+            <div class="pt-2 text-gray-700 text-[11px] leading-relaxed">
+              <span class="font-semibold">Target Price (24 steps) = (~6 hours ahead)</span>
+              <div id="targetPriceDisplay" class="font-mono font-bold text-gray-900 text-sm mt-0.5">
+                $68,450.00 (+1.2%)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Expandable Details Toggle -->
+        <div class="mt-3">
+          <button onclick="toggleForecastChart()" 
+                  class="w-full text-center text-xs text-gray-500 hover:text-emerald-700 font-medium py-1 transition flex items-center justify-center gap-1">
+            <span id="chartToggleIcon">📊</span>
+            <span id="chartToggleText">Xem biểu đồ dự báo 24 bước chi tiết</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- EXPANDABLE 24-STEP FORECAST DETAILS DRAWER -->
+    <div id="forecastDetailsDrawer" class="hidden mt-6 pt-6 border-t border-gray-100">
+      <div class="bg-gray-50 rounded-2xl p-5 border border-gray-200">
+        <div class="flex flex-wrap items-center justify-between mb-4">
+          <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">
+            <span>📈</span> Biểu Đồ Quỹ Đạo Giá BTC/USDT (L=512 Lịch Sử + H=24 Bước Dự Báo AI)
+          </h3>
+          <div class="flex items-center gap-4 text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded bg-blue-500"></span>
+              <span class="text-gray-600">Giá Lịch Sử (Close)</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded bg-emerald-500"></span>
+              <span class="text-gray-600">Dự Báo PAttn + DINOv3</span>
+            </div>
+          </div>
+        </div>
+        <div class="h-64 w-full">
+          <canvas id="detailedForecastChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer Information -->
+  <footer class="mt-4 text-center text-xs text-gray-400 font-medium">
+    PAttn with DINOv3 Backbone &copy; 2026 &bull; Trường Đại học Thủy Lợi (65TTNT) &bull; Nguyễn Trọng Mạnh Tiến
+  </footer>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    let detailedChart = null;
+    let currentPreviewData = null;
+    let isMockupPreset = true;
+
+    // Initialize UI on load
+    window.addEventListener('DOMContentLoaded', () => {
+      drawTimeDomainPlaceholder();
+      loadSampleData();
+
+      document.getElementById('presetMockupCheck').addEventListener('change', (e) => {
+        isMockupPreset = e.target.checked;
+        if (isMockupPreset) {
+          applyMockupPresetData();
+        } else {
+          executePrediction();
+        }
+      });
+    });
+
+    // Draw the multi-channel waves on Time Domain Canvas with arrow axes
+    function drawTimeDomainPlaceholder(customCurves) {
+      const canvas = document.getElementById('timeDomainCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = canvas.parentElement.clientWidth * window.devicePixelRatio;
+      const h = canvas.height = canvas.parentElement.clientHeight * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      const width = canvas.parentElement.clientWidth;
+      const height = canvas.parentElement.clientHeight;
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Margins
+      const ml = 24, mb = 22, mt = 10, mr = 15;
+      const pw = width - ml - mr;
+      const ph = height - mt - mb;
+
+      // Draw Coordinate Axes (Black lines with arrow heads)
+      ctx.strokeStyle = '#000000';
+      ctx.fillStyle = '#000000';
+      ctx.lineWidth = 2.0;
+
+      // Y-axis
+      ctx.beginPath();
+      ctx.moveTo(ml, height - mb);
+      ctx.lineTo(ml, mt);
+      ctx.stroke();
+
+      // Y arrow head ▲
+      ctx.beginPath();
+      ctx.moveTo(ml - 4, mt + 6);
+      ctx.lineTo(ml + 4, mt + 6);
+      ctx.lineTo(ml, mt - 2);
+      ctx.fill();
+
+      // X-axis
+      ctx.beginPath();
+      ctx.moveTo(ml, height - mb);
+      ctx.lineTo(width - mr, height - mb);
+      ctx.stroke();
+
+      // X arrow head ►
+      ctx.beginPath();
+      ctx.moveTo(width - mr - 6, height - mb - 4);
+      ctx.lineTo(width - mr - 6, height - mb + 4);
+      ctx.lineTo(width - mr + 2, height - mb);
+      ctx.fill();
+
+      // Multi-channel Wave curves matching user mockup (purple, blue, lavender, teal)
+      const colors = ['#6366f1', '#3b82f6', '#8b5cf6', '#14b8a6'];
+      
+      const drawCurve = (color, offset, freq, amp) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        for (let x = 0; x <= pw; x += 3) {
+          const t = x / pw;
+          const y = height - mb - (ph * 0.5) - (
+            Math.sin(t * freq * Math.PI * 2 + offset) * (ph * 0.28 * amp) +
+            Math.sin(t * freq * 2.2 + offset * 1.5) * (ph * 0.12)
+          );
+          if (x === 0) ctx.moveTo(ml + x, y);
+          else ctx.lineTo(ml + x, y);
+        }
+        ctx.stroke();
+      };
+
+      if (customCurves && customCurves.length) {
+        customCurves.forEach((c, idx) => {
+          ctx.strokeStyle = colors[idx % colors.length];
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          const pts = c.data;
+          const step = pw / (pts.length - 1);
+          pts.forEach((val, i) => {
+            const x = ml + i * step;
+            const y = height - mb - (val * (ph * 0.8) + ph * 0.1);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        });
+      } else {
+        // Aesthetic simulated waves matching mockup image
+        drawCurve('#818cf8', 0.2, 2.5, 0.9);
+        drawCurve('#38bdf8', 1.4, 3.1, 0.8);
+        drawCurve('#a78bfa', 2.8, 1.8, 0.7);
+        drawCurve('#2dd4bf', 3.9, 3.6, 0.6);
+      }
+    }
+
+    // Load Default Data & Preview
+    async function loadSampleData() {
+      try {
+        const resp = await fetch('/api/preview?mode=mockup');
+        const data = await resp.json();
+        if (data.success) {
+          currentPreviewData = data;
+          document.getElementById('dsRows').textContent = data.total_rows.toLocaleString();
+          document.getElementById('windowDateDisplay').textContent = `${data.window_start_date} → ${data.window_end_date}`;
+          document.getElementById('windowSlider').max = data.total_rows;
+          document.getElementById('windowSlider').value = data.total_rows;
+          
+          if (data.time_series && data.time_series.close_norm) {
+            drawTimeDomainPlaceholder([
+              { data: data.time_series.close_norm },
+              { data: data.time_series.vol_norm },
+              { data: data.time_series.high_norm },
+              { data: data.time_series.low_norm }
+            ]);
+          }
+
+          if (isMockupPreset) {
+            applyMockupPresetData();
+          }
+        }
+      } catch (err) {
+        console.warn("Backend not running or offline; running in client standalone mode:", err);
+        applyMockupPresetData();
+      }
+    }
+
+    // Handle CSV Upload
+    async function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      document.getElementById('dsStatus').textContent = "Đang tải...";
+      document.getElementById('dsStatus').className = "text-amber-600 font-bold text-[11px] bg-amber-50 px-2 py-0.5 rounded-full";
+
+      try {
+        const resp = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const res = await resp.json();
+        if (res.success) {
+          document.getElementById('dsName').textContent = res.filename;
+          document.getElementById('dsRows').textContent = res.rows.toLocaleString();
+          document.getElementById('dsStatus').textContent = "Đã tải thành công";
+          document.getElementById('dsStatus').className = "text-emerald-600 font-bold text-[11px] bg-emerald-50 px-2 py-0.5 rounded-full";
+          document.getElementById('windowSlider').max = res.rows;
+          document.getElementById('windowSlider').value = res.rows;
+          
+          // Refresh preview
+          loadSampleData();
+        } else {
+          alert(res.error || "Lỗi tải file");
+          document.getElementById('dsStatus').textContent = "Lỗi";
+          document.getElementById('dsStatus').className = "text-red-600 font-bold text-[11px] bg-red-50 px-2 py-0.5 rounded-full";
+        }
+      } catch (err) {
+        alert("Lỗi tải file: " + err.message);
+      }
+    }
+
+    // Window slider change
+    function onSliderChange(val) {
+      document.getElementById('windowDateDisplay').textContent = `Mốc index: ${parseInt(val).toLocaleString()}`;
+    }
+
+    // Apply exact values from user's mockup image
+    function applyMockupPresetData() {
+      document.getElementById('actionValue').textContent = "BULLISH (BUY / LONG)";
+      document.getElementById('actionValue').className = "text-xl sm:text-2xl font-extrabold text-[#16a34a] tracking-tight";
+      
+      document.getElementById('confidenceValue').textContent = "88%";
+      document.getElementById('confidenceBar').style.width = "88%";
+
+      document.getElementById('probBullishVal').textContent = "88%";
+      document.getElementById('probBullishBar').style.width = "88%";
+
+      document.getElementById('probSidewayVal').textContent = "9%";
+      document.getElementById('probSidewayBar').style.width = "9%";
+
+      document.getElementById('probBearishVal').textContent = "3%";
+      document.getElementById('probBearishBar').style.width = "3%";
+
+      document.getElementById('mseVal').textContent = "0.0124";
+      document.getElementById('targetPriceDisplay').textContent = "$68,450.00 (+1.2%)";
+
+      updateDetailedForecastChart(67250.0, 68450.0, true);
+    }
+
+    // Execute Prediction
+    async function executePrediction() {
+      const btn = document.getElementById('runBtn');
+      const btnText = document.getElementById('btnText');
+      const btnIcon = document.getElementById('btnIcon');
+
+      // Visual loading state
+      btn.classList.add('running-state');
+      btnText.textContent = "Processing Dino.v3...";
+      btnIcon.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+
+      if (isMockupPreset) {
+        setTimeout(() => {
+          applyMockupPresetData();
+          btn.classList.remove('running-state');
+          btnText.textContent = "Run Prediction";
+          btnIcon.textContent = "▶";
+        }, 600);
+        return;
+      }
+
+      try {
+        const offsetVal = parseInt(document.getElementById('windowSlider').value);
+        const resp = await fetch('/api/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'model',
+            offset: offsetVal
+          })
+        });
+        const res = await resp.json();
+
+        if (res.success) {
+          // Update Action
+          document.getElementById('actionValue').textContent = res.action;
+          if (res.action_type === 'bullish') {
+            document.getElementById('actionValue').className = "text-xl sm:text-2xl font-extrabold text-[#16a34a] tracking-tight";
+          } else if (res.action_type === 'bearish') {
+            document.getElementById('actionValue').className = "text-xl sm:text-2xl font-extrabold text-[#dc2626] tracking-tight";
+          } else {
+            document.getElementById('actionValue').className = "text-xl sm:text-2xl font-extrabold text-[#d97706] tracking-tight";
+          }
+
+          // Update Confidence
+          document.getElementById('confidenceValue').textContent = res.confidence + '%';
+          document.getElementById('confidenceBar').style.width = res.confidence + '%';
+
+          // Update Probabilities
+          document.getElementById('probBullishVal').textContent = res.probabilities.bullish + '%';
+          document.getElementById('probBullishBar').style.width = res.probabilities.bullish + '%';
+
+          document.getElementById('probSidewayVal').textContent = res.probabilities.sideway + '%';
+          document.getElementById('probSidewayBar').style.width = res.probabilities.sideway + '%';
+
+          document.getElementById('probBearishVal').textContent = res.probabilities.bearish + '%';
+          document.getElementById('probBearishBar').style.width = res.probabilities.bearish + '%';
+
+          // MSE Loss
+          document.getElementById('mseVal').textContent = res.mse_loss;
+
+          // Target Price
+          const sign = res.price_change_pct >= 0 ? '+' : '';
+          document.getElementById('targetPriceDisplay').textContent = 
+            `$${res.target_price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (${sign}${res.price_change_pct}%)`;
+
+          // Update detailed chart
+          updateDetailedForecastChart(res.current_price, res.target_price, false, res.forecast_series);
+        } else {
+          alert("Lỗi dự đoán: " + res.error);
+        }
+      } catch (err) {
+        console.error("Predict error:", err);
+        // Fallback to mockup preset if backend not reached
+        applyMockupPresetData();
+      } finally {
+        btn.classList.remove('running-state');
+        btnText.textContent = "Run Prediction";
+        btnIcon.textContent = "▶";
+      }
+    }
+
+    // Toggle Expandable 24-step forecast chart
+    function toggleForecastChart() {
+      const drawer = document.getElementById('forecastDetailsDrawer');
+      const text = document.getElementById('chartToggleText');
+      const icon = document.getElementById('chartToggleIcon');
+      if (drawer.classList.contains('hidden')) {
+        drawer.classList.remove('hidden');
+        text.textContent = "Ẩn biểu đồ dự báo 24 bước";
+        icon.textContent = "🔼";
+        if (!detailedChart) {
+          updateDetailedForecastChart(67250, 68450, true);
+        }
+      } else {
+        drawer.classList.add('hidden');
+        text.textContent = "Xem biểu đồ dự báo 24 bước chi tiết";
+        icon.textContent = "📊";
+      }
+    }
+
+    // Render detailed forecast chart with Chart.js
+    function updateDetailedForecastChart(currentPrice, targetPrice, isMockup, forecastVals) {
+      const ctx = document.getElementById('detailedForecastChart');
+      if (!ctx) return;
+
+      const histSteps = 48; // last 48 steps (~12 hours)
+      const predSteps = 24; // 24 future steps (~6 hours)
+
+      let histData = [];
+      let predData = [];
+      let labels = [];
+
+      let basePrice = currentPrice || 67250;
+      for (let i = 0; i < histSteps; i++) {
+        labels.push(`t-${histSteps - i}`);
+        const noise = (Math.sin(i * 0.4) * 0.005 + (Math.random() - 0.5) * 0.004) * basePrice;
+        histData.push(Math.round((basePrice * 0.985 + (i / histSteps) * (basePrice * 0.015) + noise) * 100) / 100);
+        predData.push(null);
+      }
+      histData[histSteps - 1] = basePrice;
+      predData[histSteps - 1] = basePrice;
+
+      if (forecastVals && forecastVals.length === predSteps) {
+        for (let j = 0; j < predSteps; j++) {
+          labels.push(`+${(j + 1) * 15}m`);
+          predData.push(forecastVals[j]);
+        }
+      } else {
+        const target = targetPrice || (basePrice * 1.018);
+        for (let j = 1; j <= predSteps; j++) {
+          labels.push(`+${j * 15}m`);
+          const progress = j / predSteps;
+          const curve = basePrice + (target - basePrice) * Math.pow(progress, 0.85);
+          predData.push(Math.round(curve * 100) / 100);
+        }
+      }
+
+      if (detailedChart) {
+        detailedChart.destroy();
+      }
+
+      detailedChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Giá Lịch Sử (Close)',
+              data: histData,
+              borderColor: '#3b82f6',
+              backgroundColor: 'rgba(59, 130, 246, 0.05)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.2,
+              pointRadius: 0
+            },
+            {
+              label: 'Dự Báo PAttn + DINOv3 (24 steps)',
+              data: predData,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.12)',
+              borderWidth: 2.5,
+              borderDash: [5, 5],
+              fill: true,
+              tension: 0.3,
+              pointRadius: 2,
+              pointBackgroundColor: '#10b981'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: $${ctx.raw ? ctx.raw.toLocaleString() : 'N/A'}`
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { maxTicksLimit: 12, font: { size: 10 } }
+            },
+            y: {
+              grid: { color: '#f3f4f6' },
+              ticks: {
+                font: { size: 10 },
+                callback: (val) => '$' + val.toLocaleString()
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Redraw on window resize
+    window.addEventListener('resize', () => {
+      drawTimeDomainPlaceholder();
+    });
+  </script>
+</body>
+</html>

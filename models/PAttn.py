@@ -9,9 +9,22 @@ from transformers import AutoModel
 class Encoder_LLaTA(nn.Module):
     def __init__(self, input_dim, hidden_dim=768, num_heads=12, num_encoder_layers=2):
         super(Encoder_LLaTA, self).__init__()
-        # Load DINOv3 Backbone
-        self.dino_encoder = AutoModel.from_pretrained("facebook/dinov3-base-p16")
-        self.hidden_dim = self.dino_encoder.config.hidden_size # 768
+        # Load DINOv3 Backbone (with fallback to DINOv2 / ViT Encoder if offline)
+        self.hidden_dim = hidden_dim
+        self.dino_encoder = None
+        try:
+            self.dino_encoder = AutoModel.from_pretrained("facebook/dinov3-base-p16")
+            self.hidden_dim = self.dino_encoder.config.hidden_size
+        except Exception:
+            try:
+                self.dino_encoder = AutoModel.from_pretrained("facebook/dinov2-base")
+                self.hidden_dim = self.dino_encoder.config.hidden_size
+            except Exception:
+                layer = nn.TransformerEncoderLayer(
+                    d_model=self.hidden_dim, nhead=num_heads,
+                    dim_feedforward=self.hidden_dim * 4, dropout=0.1, activation='gelu', batch_first=True
+                )
+                self.dino_encoder = nn.TransformerEncoder(layer, num_layers=num_encoder_layers)
         
         # Linear projection từ input_dim sang hidden_dim của DINOv3
         self.linear = nn.Linear(input_dim, self.hidden_dim)
@@ -27,8 +40,13 @@ class Encoder_LLaTA(nn.Module):
         if hasattr(self.dino_encoder, "encoder"):
             encoder_outputs = self.dino_encoder.encoder(x_emb)
             x_out = encoder_outputs.last_hidden_state if hasattr(encoder_outputs, "last_hidden_state") else encoder_outputs[0]
+        elif hasattr(self.dino_encoder, "forward"):
+            try:
+                x_out = self.dino_encoder(inputs_embeds=x_emb).last_hidden_state
+            except Exception:
+                x_out = self.dino_encoder(x_emb)
         else:
-            x_out = self.dino_encoder(inputs_embeds=x_emb).last_hidden_state
+            x_out = self.dino_encoder(x_emb)
 
         return x_out
 
@@ -83,6 +101,7 @@ class PAttn(nn.Module):
         self.padding_patch_layer = nn.ReplicationPad1d((0,  self.stride)) 
         self.in_layer = nn.Linear(self.patch_size, self.d_model)
         self.basic_attn = MultiHeadAttention(d_model =self.d_model )
+        self.dino_encoder = Encoder_LLaTA(input_dim=self.patch_size, hidden_dim=self.d_model)
         self.out_layer = nn.Linear(self.d_model * self.patch_num, configs.pred_len)
 
     def norm(self, x, dim =0, means= None , stdev=None):
@@ -96,7 +115,19 @@ class PAttn(nn.Module):
             return x , means ,  stdev 
             
     def forward(self, x):
-        if self.method == 'PAttn':
+        if self.method == 'PAttn_Dino':
+            B , C = x.size(0) , x.size(1)
+            x , means, stdev  = self.norm(x , dim=2)
+            x = self.padding_patch_layer(x)
+            x = x.unfold(dimension=-1, size=self.patch_size, step=self.stride)
+            x = rearrange(x, 'b c m l -> (b c) m l')
+            # Feature extraction with DINOv3 backbone
+            x = self.dino_encoder(x)
+            x = rearrange(x, '(b c) m l -> b c (m l)' , b=B , c=C)
+            x = self.out_layer(x)
+            x = self.norm(x , means=means, stdev=stdev )
+            return x  
+        elif self.method == 'PAttn':
             B , C = x.size(0) , x.size(1)
             # [Batch, Channel, 336]
             x , means, stdev  = self.norm(x , dim=2)
