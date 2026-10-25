@@ -332,7 +332,7 @@ Uploads a custom CSV dataset for testing.
 * **Author:** Nguyen Trong Manh Tien
 * **Student ID:** `2351260689`
 * **Major:** Artificial Intelligence & Data Science (AI & DS) — Class `65TTNT`
-* **Institution:** Thang Long University (TLU), Hanoi, Vietnam
+* **Institution:** Thuy Loi University (TLU), Hanoi, Vietnam
 * **Course:** Special Topics in AI & Data Science (*Chuyên đề TTNT & KHDL*)
 * **Instructor:** MSc. Dat Tran (`dat.trananh@tlu.edu.vn`)
 
