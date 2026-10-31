@@ -1,3 +1,7 @@
+import torch.nn as nn
+from transformers import AutoModel
+
+
 class Model(nn.Module):
     def __init__(self, configs):
         super(Model, self).__init__()
