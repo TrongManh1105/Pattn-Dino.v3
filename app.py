@@ -14,8 +14,16 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32MB max upload
 
 # Global state
+# Global state & Primary Dataset Configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, "BTCUSDT_15m_private.csv")
+DATA_CANDIDATES = [
+    os.path.join(BASE_DIR, "BTCUSDT_1m_5M_rows.csv"),
+    os.path.join(os.path.dirname(BASE_DIR), "BTCUSDT_1m_5M_rows.csv"),
+    os.path.join(BASE_DIR, "BTCUSDT_15m_private.csv"),
+    os.path.join(os.path.dirname(BASE_DIR), "BTCUSDT_15m_private.csv")
+]
+
+DATA_FILE = next((p for p in DATA_CANDIDATES if os.path.exists(p)), os.path.join(BASE_DIR, "BTCUSDT_1m_5M_rows.csv"))
 
 # Initialize model
 print("[INIT] Loading PAttn + DINOv3 Backbone...")
@@ -30,12 +38,12 @@ model = pattn_dino_model.PAttnDino(
 )
 model.eval()
 
-# Cache default dataset
+# Cache default master dataset (BTCUSDT_1m_5M_rows.csv)
 default_df = None
-if os.path.exists(DATA_FILE):
+if DATA_FILE and os.path.exists(DATA_FILE):
     try:
         default_df, _ = pattn_dino_model.load_dataset(DATA_FILE)
-        print(f"[INIT] Loaded default BTCUSDT data: {len(default_df)} records.")
+        print(f"[INIT] Loaded primary master data ({os.path.basename(DATA_FILE)}): {len(default_df):,} records.")
     except Exception as e:
         print(f"[WARN] Failed to load default data: {e}")
 
@@ -51,18 +59,19 @@ def get_info():
     has_default = default_df is not None
     info = {
         "model_name": "PAttn (NeurIPS 2024) + DINOv3 Backbone",
+        "dataset_name": os.path.basename(DATA_FILE) if DATA_FILE and os.path.exists(DATA_FILE) else "BTCUSDT_1m_5M_rows.csv",
         "d_model": 768,
         "seq_len": 512,
         "patch_size": 16,
         "stride": 8,
         "patch_num": 63,
         "pred_horizon": 24,
-        "timeframe": "15m (~6 hours ahead)",
+        "timeframe": "1m (5M Rows Master Dataset)",
         "features": ['open', 'high', 'low', 'close', 'volume', 'quote_volume', 'number_of_trades'],
         "has_default_data": has_default,
         "default_records": len(default_df) if has_default else 0,
-        "date_start": default_df['date'].iloc[0] if has_default and 'date' in default_df.columns else None,
-        "date_end": default_df['date'].iloc[-1] if has_default and 'date' in default_df.columns else None,
+        "date_start": str(default_df['date'].iloc[0]) if has_default and 'date' in default_df.columns else None,
+        "date_end": str(default_df['date'].iloc[-1]) if has_default and 'date' in default_df.columns else None,
         "backend": model.dino_backbone.backend_type
     }
     return jsonify(info)
@@ -256,14 +265,23 @@ def predict():
         return jsonify({"success": False, "error": f"Lỗi chạy dự đoán: {str(e)}"}), 500
 
 def open_browser():
-    webbrowser.open_new("http://127.0.0.1:5000")
+    try:
+        webbrowser.open_new("http://127.0.0.1:5000")
+    except Exception:
+        pass
 
 if __name__ == "__main__":
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", 5000))
+    is_prod = os.environ.get("FLASK_ENV") == "production"
+
     print("\n" + "="*60)
     print("   PAttn BTC/USDT Prediction - DINOv3 Dashboard")
-    print("   Truy cap giao dien tai: http://127.0.0.1:5000")
+    print(f"   Listening on http://{host}:{port}")
     print("="*60 + "\n")
     
-    # Auto open browser after 1.2 seconds
-    threading.Timer(1.2, open_browser).start()
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    # Auto open browser only in non-production local mode
+    if not is_prod and host in ["127.0.0.1", "0.0.0.0", "localhost"]:
+        threading.Timer(1.2, open_browser).start()
+
+    app.run(host=host, port=port, debug=False)

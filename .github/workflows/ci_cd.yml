@@ -1,0 +1,112 @@
+name: PAttn-DINOv3 CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*.*.*" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: pattn-dinov3
+  DEFAULT_DOCKERHUB_USER: trongmanhhh
+
+jobs:
+  # =========================================================================
+  # STAGE 1: Continuous Integration (Lint, Test, Model Verification)
+  # =========================================================================
+  test-and-lint:
+    name: Lint & Model Verification Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgomp1
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install CPU PyTorch first for fast CI runners
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+
+      - name: Code Quality & Syntax Check (Flake8)
+        run: |
+          # Stop build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Warning check for style conventions (max line length 127)
+          flake8 tests/ --count --max-line-length=127 --statistics
+
+      - name: Execute Model Unit Tests (PyTest)
+        run: |
+          pytest tests/test_pattn_model.py -v --junitxml=test-results.xml
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: test-results.xml
+
+  # =========================================================================
+  # STAGE 2: Continuous Delivery (Build & Push Docker Image to Docker Hub)
+  # =========================================================================
+  build-and-push:
+    name: Build & Push Docker Image
+    needs: test-and-lint
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract Docker Metadata (Tags & Labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME || env.DEFAULT_DOCKERHUB_USER }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary & Instructions
+        run: |
+          echo "### Pipeline Completed Successfully 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "Model tests passed and Docker image built." >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag:** \`${{ steps.meta.outputs.tags }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run Command:** \`docker run -p 5000:5000 ${{ secrets.DOCKERHUB_USERNAME || env.DEFAULT_DOCKERHUB_USER }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY

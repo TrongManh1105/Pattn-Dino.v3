@@ -1,0 +1,45 @@
+# Git and VCS
+.git
+.gitignore
+.github
+
+# Python caches and bytecode
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv
+venv
+ENV
+env
+
+# Tests and coverage
+tests
+.pytest_cache
+test-results.xml
+.coverage
+htmlcov
+
+# Large datasets and media files
+*.parquet
+*.h5
+*.hdf5
+# (BTCUSDT_1m_5M_rows.csv is included as the primary dataset)
+datasets/
+checkpoints/
+runs/
+*.log
+
+# Office docs and PDFs
+*.docx
+*.pptx
+*.pdf
+
+# IDE and OS metadata
+.vscode
+.idea
+.DS_Store
+Thumbs.db
